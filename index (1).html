@@ -1038,18 +1038,12 @@ function toggleClienteFields(){
 }
 
 function agregarCliente(){
-  console.log("=== INICIO agregarCliente ===");
-  
   const tipo = document.getElementById('cli-tipo').value;
   const nombre = document.getElementById('cli-nombre').value.trim();
   const telefono = document.getElementById('cli-telefono').value.trim();
   const direccion = document.getElementById('cli-direccion').value.trim();
   const email = document.getElementById('cli-email').value.trim();
   const notas = document.getElementById('cli-notas').value.trim();
-  
-  console.log("Tipo:", tipo);
-  console.log("Nombre:", nombre);
-  console.log("Teléfono:", telefono);
   
   if(!nombre || !telefono){
     alert('❌ Completa al menos nombre y teléfono');
@@ -1070,18 +1064,9 @@ function agregarCliente(){
     fechaRegistro: today()
   };
   
-  console.log("Cliente a guardar:", nuevoCliente);
-  
-  // Asegurar que D.clientes existe
-  if(!D.clientes){
-    D.clientes = [];
-    console.log("D.clientes no existía, se creó");
-  }
-  
+  if(!D.clientes) D.clientes = [];
   D.clientes.push(nuevoCliente);
   save();
-  
-  console.log("Clientes después de guardar:", D.clientes);
   
   // Limpiar formulario
   document.getElementById('cli-nombre').value = '';
@@ -1090,42 +1075,104 @@ function agregarCliente(){
   document.getElementById('cli-email').value = '';
   document.getElementById('cli-notas').value = '';
   
-  // Forzar actualización de la lista
   renderClientes();
-  
   addNotif(`Cliente "${nombre}" registrado como ${tipo === 'mayorista' ? 'Mayorista' : 'Cliente normal'}`, 'inversion');
   alert('✅ Cliente registrado correctamente');
+}
+
+function getEstadisticasCliente(cliente){
+  let ventas = [];
   
-  console.log("=== FIN agregarCliente ===");
+  if(cliente.tipo === 'mayorista'){
+    ventas = cliente.historialVentas || [];
+  } else {
+    ventas = D.ventas.filter(v => v.cliente === cliente.nombre || v.cliente === cliente.nombre + ' (Mayorista)');
+  }
+  
+  if(!ventas.length){
+    return { totalCompras: 0, totalGastado: 0, productoFavorito: 'Ninguno', ultimaCompra: 'Nunca', promedioGasto: 0 };
+  }
+  
+  const totalGastado = ventas.reduce((sum, v) => sum + (v.total || v.precio || 0), 0);
+  const totalCompras = ventas.length;
+  const promedioGasto = totalGastado / totalCompras;
+  
+  const productoCount = {};
+  ventas.forEach(v => {
+    const nombre = v.perfumeNombre || v.nombre;
+    productoCount[nombre] = (productoCount[nombre] || 0) + (v.cantidad || 1);
+  });
+  let productoFavorito = 'Ninguno';
+  let maxCount = 0;
+  for(const [nombre, count] of Object.entries(productoCount)){
+    if(count > maxCount){ maxCount = count; productoFavorito = nombre; }
+  }
+  
+  const fechas = ventas.map(v => v.fecha).sort().reverse();
+  const ultimaCompra = fechas[0] || 'Nunca';
+  
+  return { totalCompras, totalGastado, productoFavorito, ultimaCompra, promedioGasto };
+}
+
+function compartirClienteWhatsApp(id){
+  const cliente = D.clientes.find(c => c.id === id);
+  if(!cliente) return;
+  
+  const stats = getEstadisticasCliente(cliente);
+  
+  let mensaje = `*📋 RESUMEN DE COMPRAS - ${cliente.nombre.toUpperCase()}*\n\n`;
+  mensaje += `📞 Teléfono: ${cliente.telefono}\n`;
+  mensaje += `📍 Dirección: ${cliente.direccion || 'No especificada'}\n`;
+  mensaje += `🏷️ Tipo: ${cliente.tipo === 'mayorista' ? 'Mayorista' : 'Cliente normal'}\n`;
+  mensaje += `📅 Registrado: ${cliente.fechaRegistro || 'N/A'}\n\n`;
+  mensaje += `*📊 ESTADÍSTICAS:*\n`;
+  mensaje += `💰 Total gastado: ${fmt(stats.totalGastado)}\n`;
+  mensaje += `🛍️ Número de compras: ${stats.totalCompras}\n`;
+  mensaje += `⭐ Producto favorito: ${stats.productoFavorito}\n`;
+  mensaje += `📆 Última compra: ${stats.ultimaCompra}\n`;
+  mensaje += `💵 Promedio por compra: ${fmt(stats.promedioGasto)}\n\n`;
+  
+  if(cliente.tipo === 'mayorista' && cliente.historialVentas && cliente.historialVentas.length){
+    mensaje += `*📦 HISTORIAL DE COMPRAS (Mayorista):*\n`;
+    cliente.historialVentas.sort((a,b) => b.fecha.localeCompare(a.fecha)).slice(0,10).forEach(v => {
+      mensaje += `📅 ${v.fecha} | ${v.perfumeNombre} | ${v.cantidad} x ${fmt(v.precioUnitario)} = ${fmt(v.total)}\n`;
+    });
+  } else {
+    const ventasCliente = D.ventas.filter(v => v.cliente === cliente.nombre || v.cliente === cliente.nombre + ' (Mayorista)');
+    if(ventasCliente.length){
+      mensaje += `*📦 HISTORIAL DE COMPRAS:*\n`;
+      ventasCliente.sort((a,b) => b.fecha.localeCompare(a.fecha)).slice(0,10).forEach(v => {
+        mensaje += `📅 ${v.fecha} | ${v.nombre} | ${fmt(v.precio)}\n`;
+      });
+    }
+  }
+  
+  mensaje += `\n*${new Date().toLocaleDateString('es-CO')} - S&S Parfums*`;
+  
+  const mensajeCodificado = encodeURIComponent(mensaje);
+  window.open(`https://wa.me/57${cliente.telefono}?text=${mensajeCodificado}`, '_blank');
 }
 
 function renderClientes(){
-  console.log("=== renderClientes ===");
   const el = document.getElementById('clientes-lista');
-  
-  if(!el){
-    console.log("ERROR: No se encontró el elemento clientes-lista");
-    return;
-  }
-  
   if(!D.clientes || D.clientes.length === 0){
-    console.log("No hay clientes");
     el.innerHTML = '<div class="empty">Sin clientes registrados</div>';
     return;
   }
-  
-  console.log("Clientes a mostrar:", D.clientes.length);
   
   let lista = D.clientes;
   if(filtroCliente !== 'todos'){
     lista = lista.filter(c => c.tipo === filtroCliente);
   }
   
-  el.innerHTML = lista.map(c => `
+  el.innerHTML = lista.map(c => {
+    const stats = getEstadisticasCliente(c);
+    return `
     <div class="admin-ucard" style="cursor:pointer" onclick="verDetalleCliente(${c.id})">
       <div>
         <div style="font-weight:500;font-size:14px">${c.nombre}</div>
         <div style="font-size:12px;color:var(--muted);margin-top:2px">📞 ${c.telefono} ${c.direccion ? '· 📍 ' + c.direccion : ''}</div>
+        <div style="font-size:11px;color:var(--gold);margin-top:4px">💰 ${fmt(stats.totalGastado)} | 🛍️ ${stats.totalCompras} compras | ⭐ ${stats.productoFavorito}</div>
       </div>
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
         <span class="rbadge ${c.tipo === 'mayorista' ? 'r-admin' : 'r-socio'}">${c.tipo === 'mayorista' ? 'Mayorista' : 'Cliente'}</span>
@@ -1133,9 +1180,7 @@ function renderClientes(){
         <button class="btn-danger" onclick="event.stopPropagation();eliminarCliente(${c.id})">✕</button>
       </div>
     </div>
-  `).join('');
-  
-  console.log("renderClientes completado");
+  `}).join('');
 }
 
 function setFiltroCliente(f, el){
@@ -1149,12 +1194,71 @@ function verDetalleCliente(id){
   clienteSeleccionado = D.clientes.find(c => c.id === id);
   if(!clienteSeleccionado) return;
   
+  const stats = getEstadisticasCliente(clienteSeleccionado);
+  
   document.getElementById('modal-cliente-nombre').textContent = clienteSeleccionado.nombre;
   document.getElementById('modal-cliente-info').innerHTML = `
-    📞 ${clienteSeleccionado.telefono}<br>
-    📍 ${clienteSeleccionado.direccion || 'No especificada'}<br>
-    <span class="badge ${clienteSeleccionado.tipo === 'mayorista' ? 'bgold' : 'bgrn'}">${clienteSeleccionado.tipo === 'mayorista' ? 'Mayorista' : 'Cliente normal'}</span>
+    <div style="display:flex;justify-content:space-between;align-items:start;flex-wrap:wrap;gap:10px">
+      <div>
+        📞 ${clienteSeleccionado.telefono}<br>
+        📍 ${clienteSeleccionado.direccion || 'No especificada'}<br>
+        ${clienteSeleccionado.email ? `📧 ${clienteSeleccionado.email}<br>` : ''}
+        <span class="badge ${clienteSeleccionado.tipo === 'mayorista' ? 'bgold' : 'bgrn'}">${clienteSeleccionado.tipo === 'mayorista' ? 'Mayorista' : 'Cliente normal'}</span>
+      </div>
+      <div style="text-align:right">
+        <button class="btn-primary" onclick="compartirClienteWhatsApp(${clienteSeleccionado.id})" style="background:#25D366;border-color:#25D366">📱 Compartir por WhatsApp</button>
+      </div>
+    </div>
+    <div style="margin-top:15px;background:var(--dark3);border-radius:10px;padding:12px">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;text-align:center">
+        <div><div style="font-size:11px;color:var(--muted)">Total gastado</div><div style="font-size:18px;color:var(--gold);font-weight:600">${fmt(stats.totalGastado)}</div></div>
+        <div><div style="font-size:11px;color:var(--muted)">N° compras</div><div style="font-size:18px;color:var(--gold);font-weight:600">${stats.totalCompras}</div></div>
+        <div><div style="font-size:11px;color:var(--muted)">Producto favorito</div><div style="font-size:14px;color:var(--success)">${stats.productoFavorito}</div></div>
+        <div><div style="font-size:11px;color:var(--muted)">Última compra</div><div style="font-size:14px;color:var(--success)">${stats.ultimaCompra}</div></div>
+      </div>
+    </div>
   `;
+  
+  if(clienteSeleccionado.tipo === 'mayorista'){
+    let preciosHtml = '<div style="margin-top:10px"><strong style="color:var(--gold)">💰 Precios especiales</strong><div class="tbl"><table><thead><tr><th>Perfume</th><th>Precio especial</th><th>Precio normal</th><th>Acción</th></tr></thead><tbody>';
+    for(const [pid, precio] of Object.entries(clienteSeleccionado.preciosEspeciales)){
+      const perfume = D.perfumes.find(p => p.id == pid);
+      if(perfume){
+        preciosHtml += `<tr><td style="font-weight:500">${perfume.nombre}</td><td style="color:var(--gold)">${fmt(precio)}</td><td>${fmt(perfume.precio)}</td><td><button class="btn-rep" onclick="eliminarPrecioEspecial(${clienteSeleccionado.id}, ${pid})">Eliminar</button></td></tr>`;
+      }
+    }
+    preciosHtml += '</tbody></table></div>';
+    
+    let stockHtml = '<div style="margin-top:15px"><strong style="color:var(--gold)">📦 Inventario entregado</strong><div class="tbl"><table><thead><tr><th>Perfume</th><th>Cantidad</th><th>Valor stock</th><th>Acción</th></tr></thead><tbody>';
+    for(const [pid, cantidad] of Object.entries(clienteSeleccionado.inventarioEntregado)){
+      const perfume = D.perfumes.find(p => p.id == pid);
+      if(perfume && cantidad > 0){
+        const precio = clienteSeleccionado.preciosEspeciales[pid] || perfume.precio;
+        stockHtml += `<tr><td style="font-weight:500">${perfume.nombre}</td><td>${cantidad}</td><td>${fmt(precio * cantidad)}</td><td><button class="btn-rep" onclick="reponerMayorista(${clienteSeleccionado.id}, ${pid})">Reponer</button></td></tr>`;
+      }
+    }
+    stockHtml += '</tbody></table></div>';
+    
+    let historialHtml = '<div style="margin-top:15px"><strong style="color:var(--gold)">📋 Historial de ventas</strong><div class="tbl"></table><thead><tr><th>Fecha</th><th>Perfume</th><th>Cantidad</th><th>Precio unit.</th><th>Total</th></tr></thead><tbody>';
+    clienteSeleccionado.historialVentas.sort((a,b) => b.fecha.localeCompare(a.fecha)).forEach(v => {
+      historialHtml += `<tr><td>${v.fecha}</td><td>${v.perfumeNombre}</td><td>${v.cantidad}</td><td>${fmt(v.precioUnitario)}</td><td style="color:var(--gold)">${fmt(v.total)}</td></tr>`;
+    });
+    historialHtml += '</tbody></table></div>';
+    
+    document.getElementById('modal-cliente-precios').innerHTML = preciosHtml;
+    document.getElementById('modal-cliente-stock').innerHTML = stockHtml;
+    document.getElementById('modal-cliente-historial').innerHTML = historialHtml;
+  } else {
+    const ventasCliente = D.ventas.filter(v => v.cliente === clienteSeleccionado.nombre || v.cliente === clienteSeleccionado.nombre + ' (Mayorista)');
+    let historialHtml = '<div style="margin-top:15px"><strong style="color:var(--gold)">📋 Historial de compras</strong><div class="tbl"></td><thead><tr><th>Fecha</th><th>Perfume</th><th>Precio</th><th>Método</th></tr></thead><tbody>';
+    ventasCliente.forEach(v => {
+      historialHtml += `<tr><td>${v.fecha}</td><td>${v.nombre}</td><td>${fmt(v.precio)}</td><td>${v.mp}</td></tr>`;
+    });
+    historialHtml += '</tbody></table></div>';
+    document.getElementById('modal-cliente-historial').innerHTML = historialHtml;
+    document.getElementById('modal-cliente-precios').innerHTML = '';
+    document.getElementById('modal-cliente-stock').innerHTML = '';
+  }
   
   document.getElementById('modal-cliente').style.display = 'flex';
 }
@@ -1165,6 +1269,7 @@ function abrirVentaMayorista(){
   const selectPerfume = document.getElementById('vm-perfume');
   selectPerfume.innerHTML = D.perfumes.filter(p => p.estado === 'disponible').map(p => `<option value="${p.id}">${p.nombre} (${fmt(p.precio)})</option>`).join('');
   document.getElementById('vm-fecha').value = today();
+  actualizarPrecioMayorista();
   document.getElementById('modal-venta-mayorista').style.display = 'flex';
 }
 
@@ -1180,8 +1285,10 @@ function registrarVentaMayorista(){
   const cantidad = parseInt(document.getElementById('vm-cantidad').value) || 1;
   const precio = parseFloat(document.getElementById('vm-precio').value) || 0;
   const fecha = document.getElementById('vm-fecha').value;
+  const err = document.getElementById('vm-err');
   
   if(!perfumeId || cantidad < 1 || !precio || !fecha){
+    if(err) err.textContent = 'Completa todos los campos';
     alert('Completa todos los campos');
     return;
   }
@@ -1199,19 +1306,21 @@ function registrarVentaMayorista(){
   
   clienteSeleccionado.inventarioEntregado[perfumeId] = stockActual - cantidad;
   clienteSeleccionado.historialVentas.push({
-    id: Date.now(),
-    fecha: fecha,
-    perfumeId: perfumeId,
-    perfumeNombre: perfume.nombre,
-    cantidad: cantidad,
-    precioUnitario: precio,
-    total: total
+    id: Date.now(), fecha, perfumeId, perfumeNombre: perfume.nombre,
+    cantidad, precioUnitario: precio, total
+  });
+  
+  D.ventas.push({
+    pid: perfumeId, nombre: perfume.nombre, genero: perfume.genero,
+    costo: perfume.costo, precio, utilidad: (precio - perfume.costo) * cantidad,
+    fecha, cliente: clienteSeleccionado.nombre + ' (Mayorista)', mp: 'mayorista', id: Date.now()
   });
   
   save();
   cerrarModal('modal-venta-mayorista');
   verDetalleCliente(clienteSeleccionado.id);
   renderClientes();
+  updateResumen();
   alert(`Venta registrada. Total: ${fmt(total)}`);
 }
 
@@ -1234,6 +1343,14 @@ function reponerMayorista(clienteId, perfumeId){
   if(cliente && perfume){
     const actual = cliente.inventarioEntregado[perfumeId] || 0;
     cliente.inventarioEntregado[perfumeId] = actual + cantidad;
+    
+    // Buscar un perfume disponible para entregar
+    const perfumeDisponible = D.perfumes.find(p => p.id == perfumeId && p.estado === 'disponible');
+    if(perfumeDisponible){
+      const idx = D.perfumes.findIndex(p => p.id === perfumeDisponible.id);
+      if(idx !== -1) D.perfumes[idx].estado = 'vendido';
+    }
+    
     save();
     verDetalleCliente(clienteId);
     alert(`Reposición registrada. Ahora tiene ${cliente.inventarioEntregado[perfumeId]} unidades.`);
@@ -1249,18 +1366,29 @@ function editarCliente(id){
   const nuevoTelefono = prompt('Nuevo teléfono:', cliente.telefono);
   if(nuevoTelefono === null) return;
   const nuevaDireccion = prompt('Nueva dirección:', cliente.direccion || '');
+  const cambiarTipo = confirm(`¿Cambiar tipo de cliente?\nActual: ${cliente.tipo === 'mayorista' ? 'Mayorista' : 'Normal'}\nAceptar para cambiar, Cancelar para mantener.`);
   
   cliente.nombre = nuevoNombre.trim();
   cliente.telefono = nuevoTelefono.trim();
   if(nuevaDireccion !== null) cliente.direccion = nuevaDireccion.trim();
   
+  if(cambiarTipo){
+    const tipoAnterior = cliente.tipo;
+    cliente.tipo = cliente.tipo === 'mayorista' ? 'normal' : 'mayorista';
+    if(cliente.tipo === 'mayorista'){
+      if(!cliente.preciosEspeciales) cliente.preciosEspeciales = {};
+      if(!cliente.inventarioEntregado) cliente.inventarioEntregado = {};
+      if(!cliente.historialVentas) cliente.historialVentas = [];
+    }
+  }
+  
   save();
   renderClientes();
-  alert('Cliente actualizado');
+  alert('Cliente actualizado correctamente');
 }
 
 function eliminarCliente(id){
-  if(!confirm('¿Eliminar este cliente?')) return;
+  if(!confirm('¿Eliminar este cliente? Se perderá todo su historial.')) return;
   D.clientes = D.clientes.filter(c => c.id !== id);
   save();
   renderClientes();
