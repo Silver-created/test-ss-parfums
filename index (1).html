@@ -6,6 +6,7 @@
 <title>S&S Parfums</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&family=Montserrat:wght@300;400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 :root{
   --gold:#C9A84C;--gold-light:#E8C97A;--gold-dark:#8B6914;
@@ -578,10 +579,69 @@ hr{border:none;border-top:0.5px solid var(--border);margin:1rem 0;}
 </div>
 
 <script>
+  // Configuración de Supabase
+const SUPABASE_URL = 'https://ztoxjwypormpjxyidtwn.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_BzKD9iJY1z14lZyyt7yynA_6vj_Uzxz';
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+let datosCargados = false;
 const DEF={users:[{id:1,user:'admin',pass:'ss2026',role:'admin',nombre:'Administrador'}],inversiones:[],perfumes:[],ventas:[],socios:{s1:'',s2:'',pct1:50},notifs:[],clientes:[],tempIng:[]};
 let D=JSON.parse(localStorage.getItem('ss_v4')||JSON.stringify(DEF));
 let CU=null,filtro='todos',filtroInv='todos',rpPeriod='mes',chartV=null,chartG=null,modalPassId=null;
-function save(){localStorage.setItem('ss_v4',JSON.stringify(D));}
+async function save() {
+  if(!datosCargados) return;
+  try {
+    const { error } = await supabase
+      .from('datos_ss')
+      .upsert({ id: 'principal', data: D, updated_at: new Date() });
+    if(error) console.error("Error guardando:", error);
+    else console.log("✅ Datos guardados");
+  } catch(e) { console.error(e); }
+}
+  async function cargarDatos() {
+  try {
+    const { data, error } = await supabase
+      .from('datos_ss')
+      .select('data')
+      .eq('id', 'principal')
+      .single();
+    
+    if(data) {
+      D = data.data;
+    } else {
+      await supabase.from('datos_ss').insert({ id: 'principal', data: D });
+    }
+    
+    datosCargados = true;
+    if(typeof renderInversiones === 'function') renderInversiones();
+    if(typeof renderPerfumes === 'function') renderPerfumes();
+    if(typeof renderVentas === 'function') renderVentas();
+    if(typeof renderClientes === 'function') renderClientes();
+    if(typeof updateResumen === 'function') updateResumen();
+  } catch(error) {
+    console.error("Error cargando:", error);
+  }
+}
+
+function escucharCambios() {
+  supabase
+    .channel('datos_ss_changes')
+    .on('postgres_changes', 
+      { event: 'UPDATE', schema: 'public', table: 'datos_ss', filter: 'id=eq.principal' },
+      (payload) => {
+        if(datosCargados && payload.new && payload.new.data) {
+          const nuevosDatos = payload.new.data;
+          if(JSON.stringify(D) !== JSON.stringify(nuevosDatos)) {
+            D = nuevosDatos;
+            if(typeof renderInversiones === 'function') renderInversiones();
+            if(typeof renderPerfumes === 'function') renderPerfumes();
+            if(typeof renderVentas === 'function') renderVentas();
+            if(typeof renderClientes === 'function') renderClientes();
+            if(typeof updateResumen === 'function') updateResumen();
+          }
+        }
+      })
+    .subscribe();
+}
 if(!D.users) D.users=[];
 if(!D.users.find(u=>u.user==='admin')){
   D.users.push({id:1,user:'admin',pass:'ss2026',role:'admin',nombre:'Administrador'});
@@ -599,6 +659,8 @@ function doLogin(){
   if(!f){document.getElementById('login-err').style.display='block';return;}
   document.getElementById('login-err').style.display='none';
   CU=f;
+  await cargarDatos();
+escucharCambios();
   document.getElementById('login-screen').style.display='none';
   document.getElementById('main-app').style.display='block';
   document.getElementById('t-user').textContent=f.nombre||f.user;
