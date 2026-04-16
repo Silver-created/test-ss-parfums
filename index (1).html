@@ -655,18 +655,30 @@ function today(){return new Date().toISOString().split('T')[0];}
 function cerrarModal(id){document.getElementById(id).style.display='none';}
 
 /* LOGIN */
-function doLogin(){
+async function doLogin(){
   const u=document.getElementById('lu').value.trim();
   const p=document.getElementById('lp').value.trim();
+  
+  // Asegurar que D tenga usuarios
+  if(!D.users) D.users = DEF.users;
+  
   const f=D.users.find(x=>x.user===u&&x.pass===p);
-  if(!f){document.getElementById('login-err').style.display='block';return;}
+  if(!f){
+    document.getElementById('login-err').style.display='block';
+    return;
+  }
+  
   document.getElementById('login-err').style.display='none';
   CU=f;
+  
+  // Cargar datos desde Supabase
   await cargarDatos();
-escucharCambios();
+  escucharCambios();
+  
   document.getElementById('login-screen').style.display='none';
   document.getElementById('main-app').style.display='block';
   document.getElementById('t-user').textContent=f.nombre||f.user;
+  
   const isAdmin=f.role==='admin';
   document.getElementById('btn-admin-tab').style.display=isAdmin?'inline-block':'none';
   document.getElementById('tab-notif').style.display='inline-block';
@@ -676,11 +688,15 @@ escucharCambios();
   document.getElementById('form-inv-card').style.display=isAdmin?'block':'none';
   document.getElementById('inv-f').value=today();
   document.getElementById('v-f').value=today();
+  
   if(D.socios.s1)document.getElementById('s1-n').value=D.socios.s1;
   if(D.socios.s2)document.getElementById('s2-n').value=D.socios.s2;
   document.getElementById('s1-p').value=D.socios.pct1||50;
   document.getElementById('s2-p').value=100-(D.socios.pct1||50);
-  checkNotifs();updateResumen();setTimeout(()=>{renderChart();renderChartGenero();},300);
+  
+  checkNotifs();
+  updateResumen();
+  setTimeout(()=>{renderChart();renderChartGenero();},300);
 }
 function logout(){CU=null;document.getElementById('login-screen').style.display='flex';document.getElementById('main-app').style.display='none';document.getElementById('lu').value='';document.getElementById('lp').value='';}
 
