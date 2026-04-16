@@ -582,8 +582,11 @@ hr{border:none;border-top:0.5px solid var(--border);margin:1rem 0;}
   // Configuración de Supabase
 const SUPABASE_URL = 'https://ztoxjwypormpjxyidtwn.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_BzKD9iJY1z14lZyyt7yynA_6vj_Uzxz';
+console.log("Supabase URL:", SUPABASE_URL);
+console.log("Supabase Key:", SUPABASE_ANON_KEY);
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 let datosCargados = false;
+console.log("Supabase inicializado:", supabase);
 const DEF={users:[{id:1,user:'admin',pass:'ss2026',role:'admin',nombre:'Administrador'}],inversiones:[],perfumes:[],ventas:[],socios:{s1:'',s2:'',pct1:50},notifs:[],clientes:[],tempIng:[]};
 let D=JSON.parse(localStorage.getItem('ss_v4')||JSON.stringify(DEF));
 let CU=null,filtro='todos',filtroInv='todos',rpPeriod='mes',chartV=null,chartG=null,modalPassId=null;
